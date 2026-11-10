@@ -3,20 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bar Costing App</title>
+    <title>Qose Costing App</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Meta tags khusus untuk iPhone Add to Home Screen -->
+    <!-- Library untuk cetak PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Costing">
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans pb-10">
-    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg">
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg relative">
         <div class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md">
-            <h1 class="text-xl font-bold tracking-wide">Beverage Cost Calculator</h1>
+            <h1 class="text-xl font-bold tracking-wide">Qose Costing App</h1>
         </div>
         
         <div class="p-4 space-y-6">
+            <!-- Section Info Menu & Tombol Navigasi -->
+            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                <div>
+                    <label class="text-xs font-semibold text-gray-500 mb-1 block">Nama Menu / Pekerjaan</label>
+                    <input type="text" id="menuName" placeholder="Contoh: Ube Matcha" class="w-full border border-gray-300 rounded-lg p-2 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="saveRecipe()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg p-2 text-sm font-semibold shadow transition-colors">Simpan Kerja</button>
+                    <button onclick="openLoadModal()" class="bg-slate-600 hover:bg-slate-700 text-white rounded-lg p-2 text-sm font-semibold shadow transition-colors">Muat Data</button>
+                    <button onclick="downloadPDF()" class="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg p-2 text-sm font-semibold shadow flex justify-center items-center gap-2 mt-1 transition-colors">
+                        📄 Download Laporan PDF
+                    </button>
+                </div>
+            </div>
+
             <!-- Section Input Bahan -->
             <div>
                 <h2 class="font-semibold text-lg border-b pb-2 mb-3">Rincian Bahan Baku</h2>
@@ -37,8 +54,8 @@
                         <input type="number" id="wastePct" value="3" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
                     </div>
                     <div class="col-span-2">
-                        <label class="text-xs font-semibold text-gray-500 mb-1 block">Total Biaya Packaging (Cup, Lid, dll)</label>
-                        <input type="number" id="packagingCost" placeholder="Rp" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
+                        <label class="text-xs font-semibold text-gray-500 mb-1 block">Total Biaya Packaging (Rp)</label>
+                        <input type="number" id="packagingCost" placeholder="Contoh: 1500" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
                     </div>
                 </div>
             </div>
@@ -59,41 +76,77 @@
                         <span class="text-sm text-slate-400">Gross Profit / Cup</span>
                         <span class="font-bold text-lg text-white" id="grossProfit">Rp 0</span>
                     </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-slate-400">Actual Food Cost</span>
+                        <span class="font-bold text-md text-amber-400" id="actualFc">0%</span>
+                    </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Muat Resep -->
+    <div id="loadModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-center items-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center border-b pb-3 mb-3">
+                <h2 class="text-lg font-bold">Resep Tersimpan</h2>
+                <button onclick="closeLoadModal()" class="text-gray-500 hover:text-red-500 font-bold text-2xl">&times;</button>
+            </div>
+            <div id="savedList" class="flex-1 overflow-y-auto space-y-2">
+                <!-- Daftar menu akan dimuat di sini -->
             </div>
         </div>
     </div>
 
     <script>
         let ingredientCount = 0;
+        let currentCalculations = { hpp: 0, suggestedPrice: 0, grossProfit: 0, actualFc: 0, totalIngredientsCost: 0 };
 
-        function addIngredient() {
+        // 1. TAMBAH BAHAN DENGAN KATEGORI
+        function addIngredient(data = null) {
             const id = ingredientCount++;
+            const nameVal = data ? data.name : '';
+            const typeVal = data ? data.type : 'Liquid';
+            const priceVal = data ? data.price : '';
+            const sizeVal = data ? data.size : '';
+            const usageVal = data ? data.usage : '';
+
             const html = `
-                <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm relative transition-all" id="ing-${id}">
+                <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm relative transition-all ingredient-item" id="ing-${id}">
                     <button onclick="removeIngredient(${id})" class="absolute top-2 right-3 text-red-400 hover:text-red-600 font-bold text-xl">&times;</button>
-                    <input type="text" placeholder="Nama Bahan (misal: Fresh Milk)" class="w-[90%] border-none focus:ring-0 p-1 text-sm font-semibold mb-2 bg-transparent">
+                    
+                    <div class="flex gap-2 mb-3 w-[85%]">
+                        <input type="text" placeholder="Nama Bahan (Cth: Fresh Milk)" value="${nameVal}" class="ing-name w-[60%] border-b border-gray-300 focus:outline-none focus:border-slate-500 p-1 text-sm font-semibold bg-transparent">
+                        <select class="ing-type w-[40%] border border-gray-200 rounded-md p-1 text-xs font-semibold text-slate-700 bg-gray-50 focus:outline-none">
+                            <option value="Liquid" ${typeVal === 'Liquid' ? 'selected' : ''}>Liquid</option>
+                            <option value="Prep" ${typeVal === 'Prep' ? 'selected' : ''}>Prep / Batch</option>
+                            <option value="Solid" ${typeVal === 'Solid' ? 'selected' : ''}>Solid / Dry</option>
+                            <option value="Garnish" ${typeVal === 'Garnish' ? 'selected' : ''}>Garnish</option>
+                        </select>
+                    </div>
+
                     <div class="grid grid-cols-3 gap-3">
                         <div>
                             <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Harga Beli</label>
-                            <input type="number" placeholder="Rp" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-price" oninput="calculate()">
+                            <input type="number" placeholder="Rp" value="${priceVal}" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-price" oninput="calculate()">
                         </div>
                         <div>
                             <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Isi Kemasan</label>
-                            <input type="number" placeholder="g / ml" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-size" oninput="calculate()">
+                            <input type="number" placeholder="g / ml" value="${sizeVal}" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-size" oninput="calculate()">
                         </div>
                         <div>
                             <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Dosis Pakai</label>
-                            <input type="number" placeholder="g / ml" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-usage" oninput="calculate()">
+                            <input type="number" placeholder="g / ml" value="${usageVal}" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-usage" oninput="calculate()">
                         </div>
                     </div>
                     <div class="mt-3 text-right text-xs font-bold text-slate-600 bg-slate-100 p-2 rounded-lg inline-block float-right">
-                        Biaya: <span id="cost-${id}" class="text-slate-900">Rp 0</span>
+                        Biaya: <span class="cost-val text-slate-900">Rp 0</span>
                     </div>
                     <div class="clear-both"></div>
                 </div>
             `;
             document.getElementById('ingredientsList').insertAdjacentHTML('beforeend', html);
+            if(data) calculate();
         }
 
         function removeIngredient(id) {
@@ -105,11 +158,11 @@
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
         }
 
+        // LOGIKA PERHITUNGAN
         function calculate() {
             let totalIngredientsCost = 0;
             
-            // Hitung setiap bahan baku
-            document.querySelectorAll('#ingredientsList > div').forEach(div => {
+            document.querySelectorAll('.ingredient-item').forEach(div => {
                 const price = parseFloat(div.querySelector('.ing-price').value) || 0;
                 const size = parseFloat(div.querySelector('.ing-size').value) || 1;
                 const usage = parseFloat(div.querySelector('.ing-usage').value) || 0;
@@ -117,33 +170,243 @@
                 const cost = (price / size) * usage;
                 totalIngredientsCost += cost;
                 
-                div.querySelector('span[id^="cost-"]').innerText = formatRupiah(cost);
+                div.querySelector('.cost-val').innerText = formatRupiah(cost);
             });
 
-            // Tambahkan packaging dan persentase waste allowance
             const packagingCost = parseFloat(document.getElementById('packagingCost').value) || 0;
             const wastePct = parseFloat(document.getElementById('wastePct').value) || 0;
             
             let hpp = totalIngredientsCost + packagingCost;
             hpp = hpp + (hpp * (wastePct / 100));
 
-            // Hitung rekomendasi harga jual berdasarkan Target Food Cost
             const targetFC = parseFloat(document.getElementById('targetFC').value) || 30;
             let suggestedPrice = 0;
-            if (targetFC > 0) {
-                suggestedPrice = hpp / (targetFC / 100);
-            }
+            if (targetFC > 0) suggestedPrice = hpp / (targetFC / 100);
             
-            // Hitung Profit Kotor
             const grossProfit = suggestedPrice - hpp;
+            let actualFc = suggestedPrice > 0 ? (hpp / suggestedPrice) * 100 : 0;
 
-            // Render ke layar
+            // Simpan state untuk PDF
+            currentCalculations = { hpp, suggestedPrice, grossProfit, actualFc, totalIngredientsCost };
+
             document.getElementById('totalHpp').innerText = formatRupiah(hpp);
             document.getElementById('suggestedPrice').innerText = formatRupiah(suggestedPrice);
             document.getElementById('grossProfit').innerText = formatRupiah(grossProfit);
+            document.getElementById('actualFc').innerText = actualFc.toFixed(1) + '%';
         }
 
-        // Tampilkan satu kolom bahan baku secara otomatis saat pertama kali dibuka
+        // 2. FITUR SAVE & LOAD PEKERJAAN
+        function saveRecipe() {
+            const menuName = document.getElementById('menuName').value.trim();
+            if (!menuName) {
+                alert('Silakan isi Nama Menu terlebih dahulu sebelum menyimpan!');
+                return;
+            }
+
+            const ingredients = [];
+            document.querySelectorAll('.ingredient-item').forEach(div => {
+                ingredients.push({
+                    name: div.querySelector('.ing-name').value,
+                    type: div.querySelector('.ing-type').value,
+                    price: div.querySelector('.ing-price').value,
+                    size: div.querySelector('.ing-size').value,
+                    usage: div.querySelector('.ing-usage').value
+                });
+            });
+
+            const recipeData = {
+                id: Date.now().toString(),
+                name: menuName,
+                ingredients: ingredients,
+                packaging: document.getElementById('packagingCost').value,
+                waste: document.getElementById('wastePct').value,
+                targetFc: document.getElementById('targetFC').value,
+                date: new Date().toLocaleDateString('id-ID')
+            };
+
+            let saved = JSON.parse(localStorage.getItem('qoseRecipes') || '[]');
+            const existingIndex = saved.findIndex(r => r.name.toLowerCase() === menuName.toLowerCase());
+            if(existingIndex >= 0) saved[existingIndex] = recipeData; // Update jika nama sama
+            else saved.push(recipeData);
+
+            localStorage.setItem('qoseRecipes', JSON.stringify(saved));
+            alert('Sukses! Resep "' + menuName + '" berhasil disimpan.');
+        }
+
+        function openLoadModal() {
+            const saved = JSON.parse(localStorage.getItem('qoseRecipes') || '[]');
+            const listDiv = document.getElementById('savedList');
+            listDiv.innerHTML = '';
+            
+            if(saved.length === 0) {
+                listDiv.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Belum ada resep yang disimpan.</p>';
+            } else {
+                saved.forEach(r => {
+                    listDiv.innerHTML += `
+                        <div class="border border-gray-200 rounded-lg p-3 flex justify-between items-center bg-gray-50">
+                            <div class="w-[60%]">
+                                <p class="font-bold text-sm text-slate-800 truncate">${r.name}</p>
+                                <p class="text-[10px] text-gray-500">${r.date} • ${r.ingredients.length} Bahan</p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="loadRecipe('${r.id}')" class="bg-slate-800 text-white px-3 py-1 rounded text-xs font-semibold">Buka</button>
+                                <button onclick="deleteRecipe('${r.id}')" class="bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-bold">&times;</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            document.getElementById('loadModal').classList.remove('hidden');
+        }
+
+        function closeLoadModal() {
+            document.getElementById('loadModal').classList.add('hidden');
+        }
+
+        function loadRecipe(id) {
+            const saved = JSON.parse(localStorage.getItem('qoseRecipes') || '[]');
+            const recipe = saved.find(r => r.id === id);
+            if(!recipe) return;
+
+            document.getElementById('menuName').value = recipe.name;
+            document.getElementById('packagingCost').value = recipe.packaging;
+            document.getElementById('wastePct').value = recipe.waste;
+            document.getElementById('targetFC').value = recipe.targetFc;
+
+            document.getElementById('ingredientsList').innerHTML = '';
+            ingredientCount = 0;
+            recipe.ingredients.forEach(ing => addIngredient(ing));
+            
+            calculate();
+            closeLoadModal();
+        }
+
+        function deleteRecipe(id) {
+            if(!confirm('Yakin ingin menghapus resep ini secara permanen?')) return;
+            let saved = JSON.parse(localStorage.getItem('qoseRecipes') || '[]');
+            saved = saved.filter(r => r.id !== id);
+            localStorage.setItem('qoseRecipes', JSON.stringify(saved));
+            openLoadModal(); // refresh UI list
+        }
+
+        // 3. FITUR EXPORT PDF LAPORAN MANAGER
+        function downloadPDF() {
+            const menuName = document.getElementById('menuName').value.trim() || 'Menu_Tanpa_Nama';
+            
+            // Susun baris bahan baku
+            let rows = '';
+            document.querySelectorAll('.ingredient-item').forEach(div => {
+                const name = div.querySelector('.ing-name').value || '-';
+                const type = div.querySelector('.ing-type').value;
+                const price = parseFloat(div.querySelector('.ing-price').value) || 0;
+                const size = parseFloat(div.querySelector('.ing-size').value) || 0;
+                const usage = parseFloat(div.querySelector('.ing-usage').value) || 0;
+                const cost = div.querySelector('.cost-val').innerText;
+
+                rows += `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 10px 8px; text-align: left; font-weight: 500;">${name}</td>
+                        <td style="padding: 10px 8px; text-align: center;"><span style="background: #f1f5f9; border: 1px solid #cbd5e1; padding: 3px 6px; border-radius: 4px; font-size: 10px;">${type}</span></td>
+                        <td style="padding: 10px 8px; text-align: right;">${formatRupiah(price)}</td>
+                        <td style="padding: 10px 8px; text-align: right;">${size}</td>
+                        <td style="padding: 10px 8px; text-align: right;">${usage}</td>
+                        <td style="padding: 10px 8px; text-align: right; font-weight: bold; color: #1e293b;">${cost}</td>
+                    </tr>
+                `;
+            });
+
+            // Template HTML Khusus untuk Cetak PDF (Kertas A4)
+            const htmlContent = `
+                <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #0f172a; max-width: 800px; margin: auto; background: white;">
+                    
+                    <div style="text-align: center; border-bottom: 3px solid #0f172a; padding-bottom: 15px; margin-bottom: 30px;">
+                        <h1 style="font-size: 26px; font-weight: 800; margin: 0; text-transform: uppercase; letter-spacing: 1px;">Laporan HPP Minuman</h1>
+                        <p style="color: #64748b; font-size: 14px; margin-top: 5px; font-weight: 600;">QOSE COFFEE SHOP & BAR</p>
+                    </div>
+
+                    <table style="width: 100%; margin-bottom: 30px; font-size: 14px;">
+                        <tr>
+                            <td><strong>Nama Menu:</strong> <span style="font-size: 18px; font-weight: bold; color: #2563eb;">${menuName}</span></td>
+                            <td style="text-align: right;"><strong>Tanggal Cetak:</strong> ${new Date().toLocaleDateString('id-ID')}</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 10px; border-left: 4px solid #2563eb; padding-left: 10px;">A. Rincian Bahan Baku & Preparasi</h3>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 12px;">
+                        <thead>
+                            <tr style="background-color: #0f172a; color: white;">
+                                <th style="padding: 12px 8px; text-align: left;">Nama Bahan</th>
+                                <th style="padding: 12px 8px; text-align: center;">Kategori</th>
+                                <th style="padding: 12px 8px; text-align: right;">Harga Beli</th>
+                                <th style="padding: 12px 8px; text-align: right;">Isi (g/ml)</th>
+                                <th style="padding: 12px 8px; text-align: right;">Dosis (g/ml)</th>
+                                <th style="padding: 12px 8px; text-align: right;">Biaya Pemakaian</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+
+                    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 10px; border-left: 4px solid #10b981; padding-left: 10px;">B. Analisis Profitabilitas</h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px; background-color: #f8fafc; border: 1px solid #e2e8f0;">
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 1px dashed #cbd5e1;">Subtotal Biaya Bahan Baku</td>
+                            <td style="padding: 12px; border-bottom: 1px dashed #cbd5e1; text-align: right; font-weight: bold;">${formatRupiah(currentCalculations.totalIngredientsCost)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 1px dashed #cbd5e1;">Biaya Packaging Tambahan</td>
+                            <td style="padding: 12px; border-bottom: 1px dashed #cbd5e1; text-align: right;">${formatRupiah(document.getElementById('packagingCost').value || 0)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 2px solid #94a3b8;">Waste / Loss Allowance (${document.getElementById('wastePct').value}%)</td>
+                            <td style="padding: 12px; border-bottom: 2px solid #94a3b8; text-align: right; color: #64748b;">(Termasuk di HPP)</td>
+                        </tr>
+                        <tr style="background-color: #0f172a; color: white;">
+                            <td style="padding: 15px 12px; font-weight: 800; font-size: 16px;">TOTAL HPP AKTUAL / CUP</td>
+                            <td style="padding: 15px 12px; text-align: right; font-weight: 800; font-size: 18px; color: #fbbf24;">${formatRupiah(currentCalculations.hpp)}</td>
+                        </tr>
+                    </table>
+
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 15px; background-color: white; border: 1px solid #e2e8f0;">
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">Rekomendasi Harga Jual <span style="font-size: 11px; color:#64748b;">(Target FC: ${document.getElementById('targetFC').value}%)</span></td>
+                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #10b981; font-size: 16px;">${formatRupiah(currentCalculations.suggestedPrice)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">Actual Food Cost (%)</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold;">${currentCalculations.actualFc.toFixed(1)}%</td>
+                        </tr>
+                        <tr style="background-color: #ecfdf5;">
+                            <td style="padding: 12px; font-weight: bold; color: #065f46;">Gross Profit / Cup</td>
+                            <td style="padding: 12px; text-align: right; font-weight: bold; color: #065f46; font-size: 16px;">${formatRupiah(currentCalculations.grossProfit)}</td>
+                        </tr>
+                    </table>
+                    
+                    <div style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 15px; display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8;">
+                        <span>Generated by Qose Costing App</span>
+                        <span>Prepared for Managerial Review</span>
+                    </div>
+                </div>
+            `;
+
+            // Opsi HTML to PDF
+            const opt = {
+                margin:       0,
+                filename:     `HPP_${menuName.replace(/\s+/g, '_')}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2 },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+            };
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            
+            // Generate & Download PDF
+            html2pdf().set(opt).from(tempDiv).save();
+        }
+
+        // Tampilkan 1 bahan kosong saat awal dibuka
         addIngredient();
     </script>
 </body>
