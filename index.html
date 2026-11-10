@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bar Costing App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Meta tags khusus untuk iPhone Add to Home Screen -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Costing">
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans pb-10">
+    <div class="max-w-md mx-auto bg-white min-h-screen shadow-lg">
+        <div class="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md">
+            <h1 class="text-xl font-bold tracking-wide">Beverage Cost Calculator</h1>
+        </div>
+        
+        <div class="p-4 space-y-6">
+            <!-- Section Input Bahan -->
+            <div>
+                <h2 class="font-semibold text-lg border-b pb-2 mb-3">Rincian Bahan Baku</h2>
+                <div id="ingredientsList" class="space-y-3"></div>
+                <button onclick="addIngredient()" class="mt-4 w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-xl text-sm font-semibold transition-colors">+ Tambah Bahan Baru</button>
+            </div>
+
+            <!-- Section Ekstra & Parameter -->
+            <div>
+                <h2 class="font-semibold text-lg border-b pb-2 mb-3">Pengaturan Biaya</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 mb-1 block">Target Food Cost (%)</label>
+                        <input type="number" id="targetFC" value="30" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 mb-1 block">Waste / Loss (%)</label>
+                        <input type="number" id="wastePct" value="3" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="text-xs font-semibold text-gray-500 mb-1 block">Total Biaya Packaging (Cup, Lid, dll)</label>
+                        <input type="number" id="packagingCost" placeholder="Rp" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" oninput="calculate()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Hasil Analisis -->
+            <div class="bg-slate-900 text-white rounded-2xl p-5 shadow-lg mt-4">
+                <h2 class="font-semibold text-lg mb-4 text-slate-200 border-b border-slate-700 pb-2">Analisis Profitabilitas</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-slate-400">Total HPP Aktual / Cup</span>
+                        <span class="font-bold text-lg" id="totalHpp">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-slate-400">Rekomendasi Harga Jual</span>
+                        <span class="font-bold text-xl text-emerald-400" id="suggestedPrice">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-3 border-t border-slate-700 mt-2">
+                        <span class="text-sm text-slate-400">Gross Profit / Cup</span>
+                        <span class="font-bold text-lg text-white" id="grossProfit">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ingredientCount = 0;
+
+        function addIngredient() {
+            const id = ingredientCount++;
+            const html = `
+                <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm relative transition-all" id="ing-${id}">
+                    <button onclick="removeIngredient(${id})" class="absolute top-2 right-3 text-red-400 hover:text-red-600 font-bold text-xl">&times;</button>
+                    <input type="text" placeholder="Nama Bahan (misal: Fresh Milk)" class="w-[90%] border-none focus:ring-0 p-1 text-sm font-semibold mb-2 bg-transparent">
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Harga Beli</label>
+                            <input type="number" placeholder="Rp" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-price" oninput="calculate()">
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Isi Kemasan</label>
+                            <input type="number" placeholder="g / ml" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-size" oninput="calculate()">
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-gray-400 block mb-1">Dosis Pakai</label>
+                            <input type="number" placeholder="g / ml" class="w-full border border-gray-200 rounded-lg p-2 text-sm ing-usage" oninput="calculate()">
+                        </div>
+                    </div>
+                    <div class="mt-3 text-right text-xs font-bold text-slate-600 bg-slate-100 p-2 rounded-lg inline-block float-right">
+                        Biaya: <span id="cost-${id}" class="text-slate-900">Rp 0</span>
+                    </div>
+                    <div class="clear-both"></div>
+                </div>
+            `;
+            document.getElementById('ingredientsList').insertAdjacentHTML('beforeend', html);
+        }
+
+        function removeIngredient(id) {
+            document.getElementById(`ing-${id}`).remove();
+            calculate();
+        }
+
+        function formatRupiah(number) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
+        }
+
+        function calculate() {
+            let totalIngredientsCost = 0;
+            
+            // Hitung setiap bahan baku
+            document.querySelectorAll('#ingredientsList > div').forEach(div => {
+                const price = parseFloat(div.querySelector('.ing-price').value) || 0;
+                const size = parseFloat(div.querySelector('.ing-size').value) || 1;
+                const usage = parseFloat(div.querySelector('.ing-usage').value) || 0;
+                
+                const cost = (price / size) * usage;
+                totalIngredientsCost += cost;
+                
+                div.querySelector('span[id^="cost-"]').innerText = formatRupiah(cost);
+            });
+
+            // Tambahkan packaging dan persentase waste allowance
+            const packagingCost = parseFloat(document.getElementById('packagingCost').value) || 0;
+            const wastePct = parseFloat(document.getElementById('wastePct').value) || 0;
+            
+            let hpp = totalIngredientsCost + packagingCost;
+            hpp = hpp + (hpp * (wastePct / 100));
+
+            // Hitung rekomendasi harga jual berdasarkan Target Food Cost
+            const targetFC = parseFloat(document.getElementById('targetFC').value) || 30;
+            let suggestedPrice = 0;
+            if (targetFC > 0) {
+                suggestedPrice = hpp / (targetFC / 100);
+            }
+            
+            // Hitung Profit Kotor
+            const grossProfit = suggestedPrice - hpp;
+
+            // Render ke layar
+            document.getElementById('totalHpp').innerText = formatRupiah(hpp);
+            document.getElementById('suggestedPrice').innerText = formatRupiah(suggestedPrice);
+            document.getElementById('grossProfit').innerText = formatRupiah(grossProfit);
+        }
+
+        // Tampilkan satu kolom bahan baku secara otomatis saat pertama kali dibuka
+        addIngredient();
+    </script>
+</body>
+</html>
